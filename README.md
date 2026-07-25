@@ -25,6 +25,33 @@ The OpenCode Goal Plugin adds:
 - Plan-mode safety: goals created from the `plan` agent stay paused, and auto-continue never escapes a Plan-mode session or switches agents on its own.
 - Compaction context so active goals are preserved when OpenCode summarizes a long session.
 
+## FrostedFlaming0 Fork
+
+This fork makes the plugin-level auto-continue limit authoritative. Goals default
+to 1,000 automatic continuations, or to the value configured with
+`max_auto_turns`, and the `create_goal` and `set_goal` agent tools cannot replace
+that limit with a per-goal value. This prevents an agent from silently choosing a
+smaller ceiling when it creates a long-running goal.
+
+Configure one limit for every goal:
+
+```json
+{
+  "plugin": [
+    [
+      "@prevalentware/opencode-goal-plugin",
+      {
+        "max_auto_turns": 1000
+      }
+    ]
+  ]
+}
+```
+
+Restart OpenCode after changing plugin configuration. Existing persisted goals
+that already contain a per-goal override must have that override cleared or be
+recreated before they inherit the configured limit.
+
 ## Why Use This OpenCode Goal Plugin?
 
 Use this plugin when you want OpenCode to behave more like a goal-driven coding agent instead of a one-prompt assistant. A goal stays visible, survives session compaction, can continue automatically when the session becomes idle, and can only be closed with explicit evidence or a concrete blocker.
@@ -84,7 +111,7 @@ Server options can be configured in `opencode.json`:
       {
         "auto_continue": true,
         "defer_while_tasks_active": true,
-        "max_auto_turns": 25,
+        "max_auto_turns": 1000,
         "min_continue_interval_seconds": 3,
         "max_turn_time": 300,
         "max_prompt_failures": 3,
@@ -104,7 +131,7 @@ Defaults:
 
 - `auto_continue`: `true`
 - `defer_while_tasks_active`: `true`; when enabled, goal auto-continuation waits for active OpenCode Task child sessions and their orchestrator reconciliation before sending the next goal prompt.
-- `max_auto_turns`: `25`
+- `max_auto_turns`: `1000`; this fork controls the limit at plugin level and does not expose per-goal overrides to agents.
 - `min_continue_interval_seconds`: `3`
 - `max_turn_time`: unset by default; set a positive number of seconds to retry one active-goal continuation prompt when a model turn remains busy for that long. Each new busy event resets the watchdog. Idle, built-in retry, session deletion, active Task children, and restricted agents suppress the retry. Watchdog retries are independent of `min_continue_interval_seconds` and do not consume auto-turn, no-progress, or prompt-failure budgets.
 - `max_prompt_failures`: `3`

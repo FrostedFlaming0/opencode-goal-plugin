@@ -784,7 +784,7 @@ Preserve the goal objective, status, elapsed time, budget usage, latest checkpoi
 }
 
 // src/server.ts
-var DEFAULT_MAX_AUTO_TURNS = 25;
+var DEFAULT_MAX_AUTO_TURNS = 1000;
 var DEFAULT_CONTINUE_INTERVAL_SECONDS = 3;
 var DEFAULT_MAX_PROMPT_FAILURES = 3;
 var DEFAULT_COMMAND_NAME = "goal";
@@ -821,7 +821,7 @@ Use the goal tools to handle this command:
 - If the arguments start with "edit ", update the current goal objective by calling update_goal_objective with the remaining text.
 - If the arguments start with "complete " or "done ", perform a completion audit against real artifacts and command output. Call update_goal with status "complete" only if the goal is achieved, using concise evidence from the audit.
 - If the arguments start with "unmet ", "blocked ", or "blocker ", call update_goal with status "unmet" only when the goal cannot be achieved or needs external input, using the remaining arguments as the blocker.
-- Otherwise, create a new goal with create_goal. Use the full arguments as the objective. If the user includes explicit budget instructions, pass token_budget, max_auto_turns, or max_duration_seconds to create_goal rather than leaving those words in the objective.
+- Otherwise, create a new goal with create_goal. Use the full arguments as the objective. If the user includes explicit token or duration budget instructions, pass token_budget or max_duration_seconds to create_goal rather than leaving those words in the objective. Auto-continue limits are controlled by the plugin configuration, not by the agent.
 
 Create a goal only from these explicit command arguments. Do not infer a goal from unrelated session context. After create_goal succeeds, continue working toward the new goal.`;
 }
@@ -1329,7 +1329,7 @@ var server = async ({ client }, options) => {
     const planningOnly = isPlanAgent(context.agent);
     const goal = await createGoal(context.sessionID, input.objective, {
       tokenBudget: input.token_budget ?? options?.default_token_budget ?? null,
-      maxAutoTurns: input.max_auto_turns ?? null,
+      maxAutoTurns: null,
       maxDurationSeconds: input.max_duration_seconds ?? options?.max_goal_duration_seconds ?? null,
       noProgressTokenThreshold: options?.no_progress_token_threshold ?? null,
       maxNoProgressTurns: options?.max_no_progress_turns ?? null,
@@ -1517,7 +1517,6 @@ var server = async ({ client }, options) => {
         args: {
           objective: z.string().min(1).max(4000).describe("The concrete objective to start pursuing."),
           token_budget: z.number().int().positive().nullable().optional().describe("Optional positive token budget."),
-          max_auto_turns: z.number().int().positive().nullable().optional().describe("Optional per-goal auto-continue limit."),
           max_duration_seconds: z.number().int().positive().nullable().optional().describe("Optional per-goal duration limit.")
         },
         async execute(args, context) {
@@ -1529,7 +1528,6 @@ var server = async ({ client }, options) => {
         args: {
           objective: z.string().min(1).max(4000).describe("The model-formulated concrete objective to start pursuing."),
           token_budget: z.number().int().positive().nullable().optional().describe("Optional positive token budget."),
-          max_auto_turns: z.number().int().positive().nullable().optional().describe("Optional per-goal auto-continue limit."),
           max_duration_seconds: z.number().int().positive().nullable().optional().describe("Optional per-goal duration limit.")
         },
         async execute(args, context) {

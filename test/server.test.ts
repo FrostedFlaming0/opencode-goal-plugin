@@ -63,6 +63,8 @@ test("server plugin exposes Codex-style goal tools", async () => {
     "update_goal_objective",
     "update_goal_status",
   ])
+  expect("max_auto_turns" in requireTool(tools.create_goal, "create_goal").args).toBe(false)
+  expect("max_auto_turns" in requireTool(tools.set_goal, "set_goal").args).toBe(false)
 
   const context = { sessionID: "ses_1" } as never
   const created = await requireTool(tools.create_goal, "create_goal").execute({ objective: "finish" }, context)
@@ -79,6 +81,28 @@ test("server plugin exposes Codex-style goal tools", async () => {
   expect(String(completed)).toContain('"completion_report"')
   expect(String(completed)).toContain('"completionEvidence": "verified locally"')
   expect(calls).toHaveLength(0)
+})
+
+test("goal creation cannot override the configured auto-continue limit", async () => {
+  const hooks = await plugin.server(
+    {
+      client: {
+        session: {
+          promptAsync: async () => {},
+        },
+      },
+    } as never,
+    { auto_continue: false, max_auto_turns: 1000 },
+  )
+  const tools = hooks.tool
+  if (!tools) throw new Error("expected goal tools to be registered")
+
+  const created = await requireTool(tools.create_goal, "create_goal").execute(
+    { objective: "finish", max_auto_turns: 30 } as never,
+    { sessionID: "ses_1" } as never,
+  )
+
+  expect(String(created)).toContain('"maxAutoTurns": null')
 })
 
 test("set goal lets the agent formulate the goal objective", async () => {
