@@ -205,7 +205,6 @@ OpenCode goal mode policy:
       {
         objective: "OBJECTIVE_SHOULD_NOT_LEAK_7f31",
         token_budget: 987_654,
-        max_auto_turns: 23,
         max_duration_seconds: 4_321,
       },
       context,
@@ -293,10 +292,7 @@ OpenCode goal mode policy:
     await transform("ses_budget")
 
     const usageContext = { sessionID: "ses_usage", agent: "build" } as never
-    await requireTool(tools.create_goal, "create_goal").execute(
-      { objective: "USAGE_OBJECTIVE_SHOULD_NOT_LEAK", max_auto_turns: 1 },
-      usageContext,
-    )
+    await requireTool(tools.create_goal, "create_goal").execute({ objective: "USAGE_OBJECTIVE_SHOULD_NOT_LEAK" }, usageContext)
     await hooks.event!({ event: { type: "session.idle", properties: { sessionID: "ses_usage" } } as never })
     await hooks.event!({ event: { type: "session.idle", properties: { sessionID: "ses_usage" } } as never })
     const usageLimited = await requireTool(tools.get_goal, "get_goal").execute({}, usageContext)
