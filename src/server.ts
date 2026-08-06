@@ -1,5 +1,6 @@
 import type { Config, Plugin } from "@opencode-ai/plugin"
 import { z } from "zod"
+import type { GoalSnapshot } from "./state"
 import {
   accountUsage,
   clearGoal,
@@ -59,13 +60,14 @@ const DEFAULT_CONTINUE_INTERVAL_SECONDS = 3
 const DEFAULT_MAX_PROMPT_FAILURES = 3
 const DEFAULT_COMMAND_NAME = "goal"
 const DEFAULT_RESTRICTED_AGENTS = ["plan"]
-const GOAL_SYSTEM_MARKER = "OpenCode goal mode"
 const TASK_SETTLE_DELAY_MS = 25
 const SNAPSHOT_IDLE_HOLD_MS = 250
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 const TASK_TERMINAL_STATES = new Set<TaskState>(["completed", "error", "cancelled"])
 const PLAN_MODE_CREATE_NOTICE =
   'Goal recorded while the session is in Plan mode, so execution is paused. Do not start implementation work now. Ask the user to switch to Build mode and resume the goal (for example with "/goal resume") to begin execution.'
+const LIMITED_GOAL_NOTICE =
+  "Safety limit reached. Do not start or continue substantive work for this goal. Summarize useful progress, remaining work, and blockers, then wait for the user to resume or edit the goal."
 const activeContinuations = new Set<string>()
 
 type TaskState = "running" | "completed" | "error" | "cancelled"
@@ -606,12 +608,20 @@ async function recordAssistantMessage(
 
 function mergeSystemReminder(output: { system: string[] }, reminder: string) {
   if (!reminder.trim()) return
-  if (output.system.some((block) => block.includes(GOAL_SYSTEM_MARKER))) return
+  if (output.system.some((block) => block.includes(reminder))) return
   if (output.system.length === 0) {
     output.system.push(reminder)
     return
   }
   output.system[0] = `${output.system[0]}\n\n${reminder}`
+}
+
+function getGoalToolResult(goal: GoalSnapshot | null) {
+  const result: { goal: GoalSnapshot | null; goal_mode_notice?: string } = { goal }
+  if (goal?.status === "budgetLimited" || goal?.status === "usageLimited") {
+    result.goal_mode_notice = LIMITED_GOAL_NOTICE
+  }
+  return JSON.stringify(result, null, 2)
 }
 
 const server: Plugin = async ({ client }, options?: Options) => {
@@ -793,7 +803,7 @@ const server: Plugin = async ({ client }, options?: Options) => {
           "Get the current goal for this OpenCode session, including status, observed token usage, elapsed-time usage, budgets, checkpoints, and history.",
         args: {},
         async execute(_args, context) {
-          return JSON.stringify({ goal: await getGoal(context.sessionID) }, null, 2)
+          return getGoalToolResult(await getGoal(context.sessionID))
         },
       },
       get_goal_history: {
@@ -928,8 +938,7 @@ const server: Plugin = async ({ client }, options?: Options) => {
     },
     async "experimental.chat.system.transform"(input, output) {
       if (typeof input.sessionID !== "string") return
-      const goal = await getGoal(input.sessionID)
-      mergeSystemReminder(output, systemReminder(goal, { planningOnly: isPlanAgent(goal?.lastPromptAgent) }))
+      mergeSystemReminder(output, systemReminder())
     },
     async "experimental.session.compacting"(input, output) {
       const goal = await getGoal(input.sessionID)
